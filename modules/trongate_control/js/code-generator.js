@@ -27,7 +27,7 @@ const CodeGenerator = {
 
             // Only accept messages from trusted origins
             const trustedOrigins = [
-                CodeGenerator.apiBaseUrl ? CodeGenerator.apiBaseUrl.replace(/\/+$/, '') : null,
+                CodeGenerator.apiBaseUrl ? new URL(CodeGenerator.apiBaseUrl).origin : null,
                 'https://trongate.io'
             ].filter(Boolean);
 
@@ -87,7 +87,7 @@ const CodeGenerator = {
         var parentBaseUrl = document.querySelector('base').getAttribute('href');
         var webhookUrl = parentBaseUrl + 'trongate_control-webhooks/inbound';
         const targetUrl = this.apiBaseUrl + 'evo/query_builder?webhook_url=' + encodeURIComponent(webhookUrl);
-        this._openIframeModal(targetUrl, null, null, this.templateName);
+        this._openIframeModal(targetUrl, '96vw', '96vh', this.templateName);
     },
 
     // ============================================
@@ -120,6 +120,8 @@ const CodeGenerator = {
     },
 
     _createModal(width, height) {
+        const targetWidth = (!isNaN(width) && width !== null) ? width + 'px' : width;
+        const targetHeight = (!isNaN(height) && height !== null) ? height + 'px' : height;
         const isFullViewport = (width === null || height === null);
         const iframeModalOverlay = document.createElement("div");
         iframeModalOverlay.setAttribute("id", this.MODAL_ID);
@@ -163,10 +165,8 @@ const CodeGenerator = {
                 transform: translate(-50%, -50%);
                 box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
                 overflow: hidden;
-                width: 94%;
-                max-width: ${width}px;
-                height: 94vh;
-                max-height: ${height}px;
+                width: ${targetWidth};
+                height: ${targetHeight};
             `;
         }
 
