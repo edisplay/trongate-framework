@@ -164,7 +164,7 @@
             ?>
 
             <p class="mt-2">
-                <a href="<?= BASE_URL ?>login/login/<?= $user_level_id ?>">Back to login</a>
+                <a href="<?= BASE_URL ?>login/login/<?= out($login_url) ?>">Back to login</a>
             </p>
         </main>
     </body>

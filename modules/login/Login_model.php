@@ -133,6 +133,28 @@ class Login_model extends Model {
         return $full['user_levels'] ?? [];
     }
 
+    /**
+     * Get the URL slug for a user level, respecting secret_login_word.
+     *
+     * Returns the secret word if one is configured for the given level,
+     * or the numeric ID otherwise.
+     *
+     * @param int $user_level_id The user level ID
+     * @return string The slug (secret word or numeric ID)
+     */
+    public function get_login_url(int $user_level_id): string {
+        $full = $this->load_config();
+
+        if (isset($full['user_levels'][$user_level_id])) {
+            $config = $full['user_levels'][$user_level_id];
+            if (!empty($config['secret_login_word'])) {
+                return $config['secret_login_word'];
+            }
+        }
+
+        return (string) $user_level_id;
+    }
+
     // -----------------------------------------------------------------
     // Authentication
     // -----------------------------------------------------------------

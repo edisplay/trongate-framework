@@ -15,7 +15,7 @@
                 Please wait <?= (int) $block_duration ?> minutes and try again.
             </p>
             <p>
-                <a href="<?= BASE_URL ?>login/login/<?= $user_level_id ?? '' ?>">Return to login page</a>
+                <a href="<?= BASE_URL ?>login/login/<?= out($login_url) ?>">Return to login page</a>
             </p>
         </main>
     </body>

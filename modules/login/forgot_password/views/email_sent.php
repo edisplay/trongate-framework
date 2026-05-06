@@ -90,7 +90,7 @@
             <p>Please check your inbox (and spam folder) and click the link to reset your password.</p>
 
             <div class="mt-3">
-                <a href="<?= BASE_URL ?>login/login/<?= $user_level_id ?>">Back to login</a>
+                <a href="<?= BASE_URL ?>login/login/<?= out($login_url) ?>">Back to login</a>
             </div>
         </main>
     </body>

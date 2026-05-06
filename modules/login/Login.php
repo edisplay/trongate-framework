@@ -17,9 +17,6 @@ class Login extends Trongate {
         parent::__construct($module_name);
     }
 
-    /** Secret word matched by resolve_level(), if any. */
-    private ?string $matched_secret = null;
-
     /**
      * Determine the target user level from the URL.
      *
@@ -35,17 +32,12 @@ class Login extends Trongate {
     private function resolve_level(): int {
 
         $levels = $this->model->get_configured_level_configs();
-        $segments = SEGMENTS;
+        $last_segment = get_last_part(current_url(), '/');
 
-        // Scan for configured secret words in URL segments
+        // Check if last URL segment matches a configured secret word
         foreach ($levels as $level_id => $config) {
-            if (!empty($config['secret_login_word'])) {
-                foreach ($segments as $seg) {
-                    if ($seg === $config['secret_login_word']) {
-                        $this->matched_secret = $config['secret_login_word'];
-                        return $this->resolve_level_from_secret($levels, (int) $level_id);
-                    }
-                }
+            if (!empty($config['secret_login_word']) && $last_segment === $config['secret_login_word']) {
+                return $this->resolve_level_from_secret($levels, (int) $level_id);
             }
         }
 
@@ -108,6 +100,12 @@ class Login extends Trongate {
      * @return void
      */
     public function login(): void {
+        // Guard: require a third URL segment to identify the user level
+        if (segment(3) === '') {
+            redirect(BASE_URL);
+            return;
+        }
+
         $user_level_id = $this->resolve_level();
 
         // Redirect if already logged in
@@ -123,12 +121,11 @@ class Login extends Trongate {
         $this->trongate_tokens->destroy();
 
         $config = $this->model->get_level_config($user_level_id);
-
-        // Build form action URL — use secret word if matched, otherwise numeric ID
-        $level_slug = $this->matched_secret ?? (string) $user_level_id;
+        $level_slug = $this->model->get_login_url($user_level_id);
 
         $data['form_location'] = BASE_URL . 'login/submit_login/' . $level_slug;
         $data['user_level_id'] = $user_level_id;
+        $data['login_url'] = $level_slug;
         $data['fields'] = $config['fields'];
         $data['identifier_label'] = $this->model->get_identifier_label($user_level_id);
         $data['allow_remember'] = $config['allow_remember'] ?? 0;
@@ -138,9 +135,6 @@ class Login extends Trongate {
         if (!empty($config['enable_forgot_password'])) {
             $data['forgot_password_url'] = 'login/forgot_password/' . $level_slug;
         }
-
-        // Reset for next call
-        $this->matched_secret = null;
 
         // Determine which view file to use
         $view_file = $config['view_file'] ?? 'login_default';
@@ -160,8 +154,7 @@ class Login extends Trongate {
         $config = $this->model->get_level_config($user_level_id);
         $ident_label = strtolower($this->model->get_identifier_label($user_level_id));
 
-        // Build level slug for URLs — use secret word if matched, otherwise numeric ID
-        $level_slug = $this->matched_secret ?? (string) $user_level_id;
+        $level_slug = $this->model->get_login_url($user_level_id);
 
         // Rate limiting check (before validation)
         $this->model->remove_expired_restrictions($user_level_id);
@@ -219,6 +212,7 @@ class Login extends Trongate {
 
         $data['block_duration'] = (int) ($block_duration / 60);
         $data['user_level_id'] = $user_level_id;
+        $data['login_url'] = $this->model->get_login_url($user_level_id);
         $data['view_module'] = $this->module_name;
         $data['view_file'] = 'not_allowed';
 
