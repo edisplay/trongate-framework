@@ -63,7 +63,6 @@ class Core {
         $controller_path = $this->get_controller_path();
         require_once $controller_path;
 
-        // Dev environment logic preserved
         if (strtolower(ENV) === 'dev') {
             $this->attempt_sql_transfer($controller_path);
         }

@@ -29,21 +29,6 @@ $config['login'] = [
     // Bcrypt cost factor for password hashing (higher = more secure but slower)
     'password_hash_cost' => 11,
 
-    // -----------------------------------------------------------------
-    // SMTP settings (used for the "forgot password" feature)
-    // -----------------------------------------------------------------
-    // Leave host empty to disable email sending.
-
-    'smtp' => [
-        'host'        => '',
-        'port'        => '587',
-        'username'    => '',
-        'password'    => '',
-        'encryption'  => 'tls',
-        'from_email'  => '',
-        'from_name'   => ''
-    ],
-
     // Lifespan of a password-reset token (seconds)
     'reset_token_lifespan' => 3600,
 
@@ -116,13 +101,20 @@ $config['login'] = [
         // `trongate_user_levels`, then add a new entry here keyed
         // by that row's ID.  A commented-out example is shown below.
         //
-        // 3 => [
-        //     'target_table'        => 'subscribers',
+        // To use this example:
+        //   1. Insert a row into trongate_user_levels with ID = 2
+        //      (or use whichever ID fits your schema)
+        //   2. Uncomment the block below
+        //   3. Create your members table (or point target_table at
+        //      an existing one)
+        //
+        // 2 => [
+        //     'target_table'        => 'members',
         //     'user_ref_field'      => 'trongate_user_id',
-        //     'redirect_on_success' => 'subscribers/dashboard',
-        //     'allow_remember'      => 0,
-        //     'remember_days'       => 0,
-        //     'view_file'           => 'login_compact',
+        //     'redirect_on_success' => 'members/dashboard',
+        //     'allow_remember'      => 1,   // Members often expect 'remember me'
+        //     'remember_days'       => 30,  // Keep logged in for 30 days
+        //     'view_file'           => 'login_default',
         //     'fields'              => [
         //         'identifiers' => [
         //             'email' => [

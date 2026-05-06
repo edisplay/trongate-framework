@@ -647,64 +647,33 @@ class Login_model extends Model {
     }
 
     /**
-     * Send a password reset email.
+     * Send a password reset email via the trongate_email module.
+     *
+     * Builds a plain-text message and delegates delivery to the
+     * dedicated Trongate email module, which handles SMTP
+     * communication, MIME formatting, and connection management.
      *
      * @param string $to_email The recipient email address
      * @param string $reset_link The full reset URL
      * @return bool True if sent successfully
      */
     public function send_reset_email(string $to_email, string $reset_link): bool {
-        $full = $this->load_config();
-        $smtp = $full['smtp'] ?? [];
+        $body = "Hello,\n\n";
+        $body .= "We received a request to reset your password.\n\n";
+        $body .= "Click the link below to reset your password:\n";
+        $body .= $reset_link . "\n\n";
+        $body .= "This link will expire in 1 hour.\n\n";
+        $body .= "If you did not request a password reset, you can safely ignore this email.\n";
 
-        $subject = 'Password Reset Request';
+        $html_body = nl2br($body);
 
-        $message = "Hello,\n\n";
-        $message .= "We received a request to reset your password.\n\n";
-        $message .= "Click the link below to reset your password:\n";
-        $message .= $reset_link . "\n\n";
-        $message .= "This link will expire in 1 hour.\n\n";
-        $message .= "If you did not request a password reset, you can safely ignore this email.\n\n";
-        $message .= "Best regards,\n";
-        $message .= $smtp['from_name'] ?? 'The Team';
+        $this->module('trongate_email');
 
-        $headers = 'From: ' . ($smtp['from_name'] ?? '') . ' <' . ($smtp['from_email'] ?? 'noreply@example.com') . '>' . "\r\n";
-        $headers .= 'Reply-To: ' . ($smtp['from_email'] ?? 'noreply@example.com') . "\r\n";
-        $headers .= 'X-Mailer: PHP/' . phpversion();
-
-        // If SMTP is fully configured, use it; otherwise fall back to mail()
-        if (!empty($smtp['host']) && !empty($smtp['username'])) {
-            return $this->send_smtp_email($to_email, $subject, $message, $smtp);
-        }
-
-        return mail($to_email, $subject, $message, $headers);
-    }
-
-    /**
-     * Send email via SMTP (simple socket-based sender).
-     *
-     * @param string $to Recipient
-     * @param string $subject Subject
-     * @param string $body Plain text body
-     * @param array $smtp SMTP config
-     * @return bool
-     */
-    private function send_smtp_email(string $to, string $subject, string $body, array $smtp): bool {
-        $from_email = $smtp['from_email'] ?? 'noreply@example.com';
-        $from_name = $smtp['from_name'] ?? '';
-        $host = $smtp['host'];
-        $port = $smtp['port'] ?? '587';
-        $username = $smtp['username'];
-        $password = $smtp['password'];
-        $encryption = $smtp['encryption'] ?? 'tls';
-
-        $headers = "MIME-Version: 1.0\r\n";
-        $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
-        $headers .= "From: $from_name <$from_email>\r\n";
-
-        $message = $headers . "\r\n" . $body;
-
-        return mail($to, $subject, $message, $headers);
+        return $this->trongate_email->send([
+            'to_email' => $to_email,
+            'subject' => 'Password Reset Request',
+            'body_html' => '<p>' . $html_body . '</p>'
+        ]);
     }
 
     // -----------------------------------------------------------------
