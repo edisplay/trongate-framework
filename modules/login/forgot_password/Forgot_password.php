@@ -8,7 +8,8 @@
  */
 class Forgot_password extends Trongate {
 
-    private int $default_user_level;
+    /** Secret word matched by resolve_level(), if any. */
+    private ?string $matched_secret = null;
     private object $login_model;
 
     /**
@@ -19,7 +20,6 @@ class Forgot_password extends Trongate {
     public function __construct(?string $module_name = null) {
         parent::__construct($module_name);
         $this->parent_module = 'login';
-        $this->default_user_level = 2;
     }
 
     /**
@@ -30,7 +30,6 @@ class Forgot_password extends Trongate {
     private function get_login_model(): object {
         if (!isset($this->login_model)) {
             $this->login_model = $this->login->model;
-            $this->default_user_level = (int) ($this->login_model->get_global_config('default_user_level') ?? 2);
         }
 
         return $this->login_model;
@@ -52,7 +51,8 @@ class Forgot_password extends Trongate {
         $user_level_id = $this->resolve_level();
         $config = $model->get_level_config($user_level_id);
 
-        $data['form_location'] = BASE_URL . 'login/submit_forgot_password/' . $user_level_id;
+        $level_slug = $this->matched_secret ?? (string) $user_level_id;
+        $data['form_location'] = BASE_URL . 'login/submit_forgot_password/' . $level_slug;
         $data['identifier_label'] = $model->get_identifier_label($user_level_id);
         $data['user_level_id'] = $user_level_id;
         $data['view_module'] = 'login/forgot_password';
@@ -68,15 +68,16 @@ class Forgot_password extends Trongate {
      */
     public function submit(): void {
         $model = $this->get_login_model();
-        $user_level_id = $this->resolve_level(segment(4, 'int'));
+        $user_level_id = $this->resolve_level();
         $config = $model->get_level_config($user_level_id);
         $label = $model->get_identifier_label($user_level_id);
 
+        $level_slug = $this->matched_secret ?? (string) $user_level_id;
         $submitted = post('identifier', true);
 
         if (empty($submitted)) {
             $this->set_flashdata('Please enter your ' . strtolower($label) . '.');
-            redirect('login/forgot_password/' . $user_level_id);
+            redirect('login/forgot_password/' . $level_slug);
             return;
         }
 
@@ -227,23 +228,52 @@ class Forgot_password extends Trongate {
     // -----------------------------------------------------------------
 
     /**
-     * Determine the user level from URL segment or override.
+     * Determine the target user level from the URL.
      *
-     * @param int|null $override
-     * @return int
+     * Delegates to the same logic as the parent login controller.
+     *
+     * @return int The user level ID
      */
-    private function resolve_level(?int $override = null): int {
-        if ($override !== null) {
-            return $override;
+    private function resolve_level(): int {
+        $model = $this->get_login_model();
+        $levels = $model->get_configured_level_configs();
+        $segments = SEGMENTS;
+
+        // Scan for configured secret words in URL segments
+        foreach ($levels as $level_id => $config) {
+            if (!empty($config['secret_login_word'])) {
+                $secret = $config['secret_login_word'];
+                foreach ($segments as $seg) {
+                    if ($seg === $secret) {
+                        $this->matched_secret = $secret;
+                        $last = segment(get_num_segments());
+                        $level = (int) $last;
+                        if ($level > 0 && isset($levels[$level])) {
+                            return $level;
+                        }
+                        return (int) $level_id;
+                    }
+                }
+            }
         }
 
+        // Check if any level has a secret configured
+        foreach ($levels as $config) {
+            if (!empty($config['secret_login_word'])) {
+                show_404();
+                die();
+            }
+        }
+
+        // No secrets — fall back to numeric segment
         $segment = segment(3, 'int');
 
-        if ($segment > 0) {
+        if ($segment > 0 && isset($levels[$segment])) {
             return $segment;
         }
 
-        return $this->default_user_level;
+        show_404();
+        die();
     }
 
     /**

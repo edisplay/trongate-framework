@@ -17,8 +17,9 @@ $config['login'] = [
     // Fallback view file if a user level doesn't specify its own
     'default_view_file' => 'login_default',
 
-    // The user_level_id to use when none is explicitly specified
-    'default_user_level' => 1,
+    // When at least one user level defines a secret_login_word, numeric
+    // level IDs in the URL are no longer accepted — the correct secret
+    // word must be present to reach that level's login form.
 
     // Number of failed login attempts before the account is temporarily blocked
     'max_failed_attempts' => 3,
@@ -73,10 +74,12 @@ $config['login'] = [
         1 => [
             'target_table'        => 'trongate_administrators',
             'user_ref_field'      => 'trongate_user_id',
-            'redirect_on_success' => 'trongate_administrators/manage',
-            'allow_remember'      => 0,
-            'remember_days'       => 0,
-            'view_file'           => 'login_default',
+            'secret_login_word'       => 'tg-admin',
+            'redirect_on_success'     => 'trongate_administrators/manage',
+            'allow_remember'          => 0,
+            'remember_days'           => 0,
+            'enable_forgot_password'  => false,
+            'view_file'               => 'login_default',
             'fields'              => [
                 'identifiers' => [
                     'username' => [
@@ -111,10 +114,12 @@ $config['login'] = [
         // 2 => [
         //     'target_table'        => 'members',
         //     'user_ref_field'      => 'trongate_user_id',
-        //     'redirect_on_success' => 'members/dashboard',
-        //     'allow_remember'      => 1,   // Members often expect 'remember me'
-        //     'remember_days'       => 30,  // Keep logged in for 30 days
-        //     'view_file'           => 'login_default',
+        //     'secret_login_word'       => 'members-area',
+        //     'redirect_on_success'     => 'members/dashboard',
+        //     'allow_remember'          => 1,   // Members often expect 'remember me'
+        //     'remember_days'           => 30,  // Keep logged in for 30 days
+        //     'enable_forgot_password'  => false,
+        //     'view_file'               => 'login_default',
         //     'fields'              => [
         //         'identifiers' => [
         //             'email' => [

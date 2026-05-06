@@ -200,9 +200,11 @@
 
                 <?= form_submit('login', 'Log In') ?>
 
+                <?php if (isset($forgot_password_url)): ?>
                 <p class="mt-1 text-center">
                     <a href="<?= BASE_URL . out($forgot_password_url) ?>">Forgot password?</a>
                 </p>
+                <?php endif; ?>
             </div>
 
         <?= form_close() ?>

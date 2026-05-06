@@ -50,11 +50,13 @@
 
                 <?= form_close() ?>
 
+                <?php if (isset($forgot_password_url)): ?>
                 <p class="sm text-center">
-                    <a href="login/forgot_password/<?= $user_level_id ?>">
+                    <a href="<?= BASE_URL . $forgot_password_url ?>">
                         Forgot your password?
                     </a>
                 </p>
+                <?php endif; ?>
             </div>
         </div>
     </body>

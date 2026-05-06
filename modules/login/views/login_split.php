@@ -39,9 +39,11 @@
 
             <?= form_submit('login', 'Sign In') ?>
 
+            <?php if (isset($forgot_password_url)): ?>
             <p class="link-row">
                 <a href="<?= BASE_URL . $forgot_password_url ?>">Forgot password?</a>
             </p>
+            <?php endif; ?>
 
             <?= form_close() ?>
         </div>

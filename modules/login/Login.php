@@ -17,29 +17,74 @@ class Login extends Trongate {
         parent::__construct($module_name);
     }
 
+    /** Secret word matched by resolve_level(), if any. */
+    private ?string $matched_secret = null;
+
     /**
-     * Determine the target user level from the URL segment.
+     * Determine the target user level from the URL.
      *
-     * Falls back to the configured default user level.
+     * Scans URL segments for configured secret_login_word values.
+     * If any level has a secret configured, only the correct secret
+     * word grants access — numeric level IDs alone are rejected.
+     *
+     * If no level has a secret configured, falls back to extracting
+     * the user level ID from segment(3) as an integer.
      *
      * @return int The user level ID
      */
-    private function resolve_level(?int $override = null): int {
+    private function resolve_level(): int {
 
-        if ($override !== null) {
-            return $override;
+        $levels = $this->model->get_configured_level_configs();
+        $segments = SEGMENTS;
+
+        // Scan for configured secret words in URL segments
+        foreach ($levels as $level_id => $config) {
+            if (!empty($config['secret_login_word'])) {
+                foreach ($segments as $seg) {
+                    if ($seg === $config['secret_login_word']) {
+                        $this->matched_secret = $config['secret_login_word'];
+                        return $this->resolve_level_from_secret($levels, (int) $level_id);
+                    }
+                }
+            }
         }
 
-        // When method is in URL (e.g., /login/login/2), level is segment(3)
-        // When no method in URL (/login), segment(2) is empty or non-numeric
-        // When called from index(), segment(3) may hold the level
+        // No secret matched — try numeric segment
         $segment = segment(3, 'int');
 
-        if ($segment > 0) {
+        if ($segment > 0 && isset($levels[$segment])) {
+            // Only reject numeric access if this specific level has a secret
+            if (!empty($levels[$segment]['secret_login_word'])) {
+                show_404();
+                die();
+            }
             return $segment;
         }
 
-        return (int) ($this->model->get_global_config('default_user_level') ?? 2);
+        // No level could be determined
+        show_404();
+        die();
+    }
+
+    /**
+     * Resolve level ID when a secret word has been matched.
+     *
+     * If the last URL segment is a numeric, configured level, that
+     * level is used. Otherwise, the matched secret's own level is returned.
+     *
+     * @param array $levels All configured level configs
+     * @param int $matched_level The level matched by secret word
+     * @return int The resolved user level ID
+     */
+    private function resolve_level_from_secret(array $levels, int $matched_level): int {
+        $last = $this->url->get_last_segment();
+        $level = (int) $last;
+
+        if ($level > 0 && isset($levels[$level])) {
+            return $level;
+        }
+
+        return $matched_level;
     }
 
     // -----------------------------------------------------------------
@@ -79,14 +124,23 @@ class Login extends Trongate {
 
         $config = $this->model->get_level_config($user_level_id);
 
-        $data['form_location'] = BASE_URL . 'login/submit_login/' . $user_level_id;
+        // Build form action URL — use secret word if matched, otherwise numeric ID
+        $level_slug = $this->matched_secret ?? (string) $user_level_id;
+
+        $data['form_location'] = BASE_URL . 'login/submit_login/' . $level_slug;
         $data['user_level_id'] = $user_level_id;
         $data['fields'] = $config['fields'];
         $data['identifier_label'] = $this->model->get_identifier_label($user_level_id);
         $data['allow_remember'] = $config['allow_remember'] ?? 0;
         $data['view_module'] = $this->module_name;
         $data['view_file'] = $config['view_file'];
-        $data['forgot_password_url'] = 'login/forgot_password/' . $user_level_id;
+        // Only include forgot-password URL when enabled for this user level
+        if (!empty($config['enable_forgot_password'])) {
+            $data['forgot_password_url'] = 'login/forgot_password/' . $level_slug;
+        }
+
+        // Reset for next call
+        $this->matched_secret = null;
 
         // Determine which view file to use
         $view_file = $config['view_file'] ?? 'login_default';
@@ -102,15 +156,18 @@ class Login extends Trongate {
      * @return void
      */
     public function submit_login(): void {
-        $user_level_id = $this->resolve_level(segment(3, 'int'));
+        $user_level_id = $this->resolve_level();
         $config = $this->model->get_level_config($user_level_id);
         $ident_label = strtolower($this->model->get_identifier_label($user_level_id));
+
+        // Build level slug for URLs — use secret word if matched, otherwise numeric ID
+        $level_slug = $this->matched_secret ?? (string) $user_level_id;
 
         // Rate limiting check (before validation)
         $this->model->remove_expired_restrictions($user_level_id);
 
         if (!$this->model->is_login_allowed(post('identifier', true), $user_level_id)) {
-            redirect('login/not_allowed/' . $user_level_id);
+            redirect('login/not_allowed/' . $level_slug);
             return;
         }
 
@@ -141,7 +198,7 @@ class Login extends Trongate {
 
         // Check if the user is now rate-limited
         if (!$this->model->is_login_allowed(post('identifier', true), $user_level_id)) {
-            redirect('login/not_allowed/' . $user_level_id);
+            redirect('login/not_allowed/' . $level_slug);
             return;
         }
 
@@ -190,11 +247,43 @@ class Login extends Trongate {
     /**
      * Log the user out.
      *
+     * Determines the correct login URL from the user's current token
+     * before destroying it, then redirects to that level's login form.
+     * Falls back to the homepage if no token is found.
+     *
+     * If the user's level does not have a secret_login_word but other
+     * levels do, the numeric ID cannot be used (it would 404). In that
+     * case, the user is sent to the homepage as a safe fallback.
+     *
+     * URL: /login/logout
+     *
      * @return void
      */
     public function logout(): void {
+        // Determine user level from the current token BEFORE destroying it
+        $user_obj = $this->trongate_tokens->get_user_obj();
+
+        $redirect_target = BASE_URL; // Default: homepage
+
+        if ($user_obj !== false && isset($user_obj->user_level_id)) {
+            $level_id = (int) $user_obj->user_level_id;
+            $levels = $this->model->get_configured_level_configs();
+
+            if (isset($levels[$level_id])) {
+                $config = $levels[$level_id];
+
+                if (!empty($config['secret_login_word'])) {
+                    $redirect_target = 'login/login/' . $config['secret_login_word'];
+                } else {
+                    $redirect_target = 'login/login/' . $level_id;
+                }
+            }
+        }
+
+        // Destroy all tokens
         $this->trongate_tokens->destroy();
-        redirect('login');
+
+        redirect($redirect_target);
     }
 
     /**
@@ -229,6 +318,14 @@ class Login extends Trongate {
      * @return void
      */
     public function forgot_password(): void {
+        $user_level_id = $this->resolve_level();
+        $config = $this->model->get_level_config($user_level_id);
+
+        if (empty($config['enable_forgot_password'])) {
+            show_404();
+            die();
+        }
+
         $this->module('login-forgot_password');
         $this->forgot_password->form();
     }
@@ -241,6 +338,14 @@ class Login extends Trongate {
      * @return void
      */
     public function submit_forgot_password(): void {
+        $user_level_id = $this->resolve_level();
+        $config = $this->model->get_level_config($user_level_id);
+
+        if (empty($config['enable_forgot_password'])) {
+            show_404();
+            die();
+        }
+
         $this->module('login-forgot_password');
         $this->forgot_password->submit();
     }
@@ -253,6 +358,24 @@ class Login extends Trongate {
      * @return void
      */
     public function reset_password(): void {
+        // Resolve level from the reset token to check per-level config
+        $token = segment(3);
+        $user_level_id = $this->model->get_level_id_for_token($token);
+
+        if ($user_level_id === null) {
+            // Invalid token — pass through to the child module for error handling
+            $this->module('login-forgot_password');
+            $this->forgot_password->reset();
+            return;
+        }
+
+        $config = $this->model->get_level_config($user_level_id);
+
+        if (empty($config['enable_forgot_password'])) {
+            show_404();
+            die();
+        }
+
         $this->module('login-forgot_password');
         $this->forgot_password->reset();
     }
@@ -265,6 +388,23 @@ class Login extends Trongate {
      * @return void
      */
     public function submit_reset_password(): void {
+        $token = post('token', true);
+        $user_level_id = $this->model->get_level_id_for_token($token);
+
+        if ($user_level_id === null) {
+            // Pass through to child module — it handles invalid tokens gracefully
+            $this->module('login-forgot_password');
+            $this->forgot_password->submit_reset();
+            return;
+        }
+
+        $config = $this->model->get_level_config($user_level_id);
+
+        if (empty($config['enable_forgot_password'])) {
+            show_404();
+            die();
+        }
+
         $this->module('login-forgot_password');
         $this->forgot_password->submit_reset();
     }
@@ -285,7 +425,7 @@ class Login extends Trongate {
     public function credentials_valid(string $identifier): string|bool {
         block_url('login/credentials_valid');
 
-        $user_level_id = $this->resolve_level(segment(3, 'int'));
+        $user_level_id = $this->resolve_level();
         $password = post('password');  // Raw value — do not clean or trim
 
         $valid = $this->model->validate_credentials($identifier, $password, $user_level_id);

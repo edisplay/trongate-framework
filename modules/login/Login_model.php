@@ -123,6 +123,16 @@ class Login_model extends Model {
         return array_keys($levels);
     }
 
+    /**
+     * Get all configured user level configs, keyed by level ID.
+     *
+     * @return array Full user_levels config array
+     */
+    public function get_configured_level_configs(): array {
+        $full = $this->load_config();
+        return $full['user_levels'] ?? [];
+    }
+
     // -----------------------------------------------------------------
     // Authentication
     // -----------------------------------------------------------------
@@ -686,6 +696,28 @@ class Login_model extends Model {
      * @param string $table_name
      * @return int The user level ID, or 0 if not found
      */
+    /**
+     * Get the user level ID associated with a reset token.
+     *
+     * @param string $token The reset token
+     * @return int|null The user level ID, or null if token is invalid
+     */
+    public function get_level_id_for_token(string $token): ?int {
+        $reset = $this->validate_reset_token($token);
+
+        if ($reset === false) {
+            return null;
+        }
+
+        return $this->get_level_id_for_table($reset->target_table);
+    }
+
+    /**
+     * Get the user level ID for a given target table name.
+     *
+     * @param string $table_name
+     * @return int The user level ID, or 0 if not found
+     */
     private function get_level_id_for_table(string $table_name): int {
         $full = $this->load_config();
 
@@ -695,7 +727,7 @@ class Login_model extends Model {
             }
         }
 
-        return (int) ($full['default_user_level'] ?? 0);
+        return 0;
     }
 
     /**
